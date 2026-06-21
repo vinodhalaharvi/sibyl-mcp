@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Detect Go packages
+        id: gofiles
+        run: |
+          if git ls-files -- '*.go' | grep -q .; then
+            echo "has_go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No tracked Go files yet — skipping vet/build/test."
+          fi
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: go vet
+        if: steps.gofiles.outputs.has_go == 'true'
+        run: go vet ./...
+
+      - name: Build
+        if: steps.gofiles.outputs.has_go == 'true'
+        run: go build ./...
+
+      - name: Test (race + coverage)
+        if: steps.gofiles.outputs.has_go == 'true'
+        run: go test -race -coverprofile=coverage.out ./...
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Detect Go packages
+        id: gofiles
+        run: |
+          if git ls-files -- '*.go' | grep -q .; then
+            echo "has_go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No tracked Go files yet — skipping tidy check and golangci-lint."
+          fi
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go mod tidy is clean
+        if: steps.gofiles.outputs.has_go == 'true'
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum \
+            || (echo "::error::go.mod/go.sum are not tidy — run 'go mod tidy' and commit"; exit 1)
+
+      - name: golangci-lint
+        if: steps.gofiles.outputs.has_go == 'true'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
