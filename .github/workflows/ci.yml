@@ -28,11 +28,11 @@ jobs:
       - name: Detect Go packages
         id: gofiles
         run: |
-          if [ -n "$(find . -path ./vendor -prune -o -name '*.go' -print -quit)" ]; then
+          if git ls-files -- '*.go' | grep -q .; then
             echo "has_go=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_go=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No Go files yet — skipping vet/build/test."
+            echo "::notice::No tracked Go files yet — skipping vet/build/test."
           fi
 
       - name: Download modules
@@ -67,11 +67,11 @@ jobs:
       - name: Detect Go packages
         id: gofiles
         run: |
-          if [ -n "$(find . -path ./vendor -prune -o -name '*.go' -print -quit)" ]; then
+          if git ls-files -- '*.go' | grep -q .; then
             echo "has_go=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_go=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No Go files yet — skipping tidy check and golangci-lint."
+            echo "::notice::No tracked Go files yet — skipping tidy check and golangci-lint."
           fi
 
       - name: gofmt
