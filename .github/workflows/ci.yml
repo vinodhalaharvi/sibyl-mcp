@@ -25,6 +25,16 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Detect Go packages
+        id: gofiles
+        run: |
+          if [ -n "$(find . -path ./vendor -prune -o -name '*.go' -print -quit)" ]; then
+            echo "has_go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Go files yet — skipping vet/build/test."
+          fi
+
       - name: Download modules
         run: go mod download
 
@@ -32,12 +42,15 @@ jobs:
         run: go mod verify
 
       - name: go vet
+        if: steps.gofiles.outputs.has_go == 'true'
         run: go vet ./...
 
       - name: Build
+        if: steps.gofiles.outputs.has_go == 'true'
         run: go build ./...
 
       - name: Test (race + coverage)
+        if: steps.gofiles.outputs.has_go == 'true'
         run: go test -race -coverprofile=coverage.out ./...
 
   lint:
@@ -51,6 +64,16 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Detect Go packages
+        id: gofiles
+        run: |
+          if [ -n "$(find . -path ./vendor -prune -o -name '*.go' -print -quit)" ]; then
+            echo "has_go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Go files yet — skipping tidy check and golangci-lint."
+          fi
+
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -61,12 +84,14 @@ jobs:
           fi
 
       - name: go mod tidy is clean
+        if: steps.gofiles.outputs.has_go == 'true'
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum \
             || (echo "::error::go.mod/go.sum are not tidy — run 'go mod tidy' and commit"; exit 1)
 
       - name: golangci-lint
+        if: steps.gofiles.outputs.has_go == 'true'
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
